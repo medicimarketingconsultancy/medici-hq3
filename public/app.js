@@ -13,7 +13,7 @@ const S = {
   data: null,
   tab: store.get("tab", "overview"),
   leads: { q: "", stage: "open", temp: "", source: "", view: store.get("leadView", "table"), sort: store.get("leadSort", ["fitScore", -1]) },
-  reels: { sub: "reels", q: "", style: "", status: "active", sort: "outperf" },
+  reels: { sub: "reels", q: "", style: "", status: "active", sort: "outperf", origin: "" },
   creators: { q: "" },
   openLead: null, openCreator: null,
 };
@@ -415,7 +415,7 @@ function renderReels(v) {
   const f = S.reels; const d = S.data;
   const pending = d.watchlist.filter((w) => w.state === "pending");
   v.innerHTML = `
-    <div class="page-head"><div><div class="eyebrow">Reel monitoring</div><h1>Reel Bank</h1><p>Reels beating their creator's own average by ${d.config.outperformMin}× or more — formats for your creators to recreate.</p></div>
+    <div class="page-head"><div><div class="eyebrow">Reel monitoring</div><h1>Reel Bank</h1><p>Breakout reels from your sources (${d.config.outperformMin}× or more their usual views) and from creators discovered across Instagram (views ${d.config.reachMin}× or more their follower count).</p></div>
       <div class="seg"><button class="${f.sub === "reels" ? "on" : ""}" data-sub="reels">Reels</button><button class="${f.sub === "sources" ? "on" : ""}" data-sub="sources">Sources</button><button class="${f.sub === "review" ? "on" : ""}" data-sub="review">Review${pending.length ? ` (${pending.length})` : ""}</button></div></div>
     <div id="reels-body"></div>`;
   $$("[data-sub]", v).forEach((b) => b.addEventListener("click", () => { f.sub = b.dataset.sub; renderReels(v); }));
@@ -424,13 +424,14 @@ function renderReels(v) {
 }
 function drawReelGrid(body) {
   const f = S.reels; const q = f.q.toLowerCase();
-  let rows = S.data.reels.filter((r) => (f.status === "all" || (f.status === "active" ? !["Used", "Skip"].includes(r.status) : r.status === f.status)) && (!f.style || r.style === f.style) && (!q || [r.handle, r.hook, r.audio].join(" ").toLowerCase().includes(q)));
+  let rows = S.data.reels.filter((r) => (f.status === "all" || (f.status === "active" ? !["Used", "Skip"].includes(r.status) : r.status === f.status)) && (!f.style || r.style === f.style) && (!f.origin || (f.origin === "discovered" ? r.discovered : !r.discovered)) && (!q || [r.handle, r.hook, r.audio].join(" ").toLowerCase().includes(q)));
   const key = { outperf: (r) => r.outperf ?? 0, views: (r) => r.views ?? 0, recent: (r) => Date.parse(r.postedAt || r.foundAt) }[f.sort];
   rows.sort((a, b) => key(b) - key(a));
   body.innerHTML = `<div class="toolbar">
       <input class="input search" placeholder="Search hook, audio, creator…" value="${esc(f.q)}" data-f="q">
       <select class="input" data-f="style"><option value="">All styles</option>${S.data.config.styles.map((s) => `<option ${f.style === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
       <select class="input" data-f="status">${[["active", "New + Saved"], ["New", "New"], ["Saved", "Saved"], ["Used", "Used"], ["Skip", "Skipped"], ["all", "All"]].map(([k, l]) => `<option value="${k}" ${f.status === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="input" data-f="origin"><option value="">All creators</option><option value="sources" ${f.origin === "sources" ? "selected" : ""}>My sources</option><option value="discovered" ${f.origin === "discovered" ? "selected" : ""}>Discovered</option></select>
       <select class="input" data-f="sort"><option value="outperf" ${f.sort === "outperf" ? "selected" : ""}>Most outperforming</option><option value="views" ${f.sort === "views" ? "selected" : ""}>Most views</option><option value="recent" ${f.sort === "recent" ? "selected" : ""}>Most recent</option></select>
     </div>
     ${rows.length ? `<div class="reels">${rows.map(reelCard).join("")}</div>` : `<div class="card empty">${S.data.reels.length ? "No reels match these filters." : "The bank fills after the first scan. Add seed accounts under Sources to get started."}</div>`}
@@ -451,12 +452,12 @@ function drawReelGrid(body) {
 function reelCard(r) {
   const thumb = safeUrl(r.thumb);
   return `<div class="card reel ${r.status === "Used" || r.status === "Skip" ? "used" : ""}">
-    <div class="reel-top">${thumb ? `<img src="${thumb}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}<span class="x">${r.outperf != null ? r.outperf.toFixed(1) + "×" : "—"}</span><div class="hook">${esc(r.hook || "No caption")}</div></div>
+    <div class="reel-top">${thumb ? `<img src="${thumb}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}<span class="x" title="${r.basis === "reach" ? "Views vs their follower count" : "Views vs their usual reels"}">${r.outperf != null ? r.outperf.toFixed(1) + "×" + (r.basis === "reach" ? " reach" : "") : "—"}</span><div class="hook">${esc(r.hook || "No caption")}</div></div>
     <div class="reel-body">
       <div style="display:flex;justify-content:space-between;gap:6px"><span class="who">${handleLink(r.handle)}</span><span class="small muted">${fmtDate(r.postedAt)}</span></div>
       <div class="reel-stats num"><span>${fmtN(r.views)} views</span><span>${fmtN(r.likes)} likes</span><span>${fmtN(r.comments)} comm.</span></div>
       ${r.audio ? `<div class="small muted" title="Audio">♪ ${esc(r.audio)}</div>` : ""}
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${r.style ? `<span class="chip">${esc(r.style)}</span>` : ""}${r.status !== "New" ? `<span class="chip ${r.status === "Used" ? "ok" : ""}">${esc(r.status)}${r.usedBy ? " · " + esc(r.usedBy) : ""}</span>` : ""}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${r.discovered ? `<span class="chip inbound" title="Found outside your sources">Discovered${r.foundVia ? " · " + esc(r.foundVia) : ""}</span>` : ""}${r.style ? `<span class="chip">${esc(r.style)}</span>` : ""}${r.status !== "New" ? `<span class="chip ${r.status === "Used" ? "ok" : ""}">${esc(r.status)}${r.usedBy ? " · " + esc(r.usedBy) : ""}</span>` : ""}</div>
     </div>
     <div class="reel-actions">
       ${safeUrl(r.url) ? `<a class="btn sm gold" href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer">Open reel</a>` : ""}
@@ -534,6 +535,12 @@ function renderSettings(v) {
       <div class="settings-grid">${num("outperformMin", "Outperformance minimum (×)")}${num("minViews", "Minimum views")}${num("minLikes", "Minimum likes (if no views)")}${num("reelWindowDays", "Reel window (days)")}${num("reelArchiveDays", "Archive after (days)")}</div>
       <div class="section-title settings-block">Finding creators</div>
       <div class="settings-grid">${num("autoAddScore", "Auto-add score", "60+ added automatically")}${num("reviewScore", "Review score", "Below this is ignored")}${num("discoveryCap", "Discovery cap per run")}${num("firstRunDiscoveryCap", "First-run discovery cap")}${num("inactiveAfterDays", "Inactive after (days)")}</div>
+      <div class="section-title settings-block">Discovery beyond your sources</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px">${list("bioSearchPhrases", "Bio phrases to hunt for (blank = your bio keywords)")}${list("hashtags", "Niche hashtags (without #, rotated each run)")}${list("searchKeywords", "Account search terms (e.g. fitness model)")}</div>
+      <div class="settings-grid">${num("bioQueriesPerRun", "Bio searches per run")}${num("autoHashtags", "Auto hashtags per run", "Picked from your sources' captions")}${num("postsPerHashtag", "Reels per hashtag")}${num("reachMin", "Discovered reel minimum (× followers)")}${num("discoveryShare", "Budget share for discovery (0–1)")}
+        <label class="field">Hashtag scraper (Apify id)<input class="input" name="hashtagActor" value="${esc(c.hashtagActor)}"></label>
+        <label class="field">Search scraper (Apify id)<input class="input" name="searchActor" value="${esc(c.searchActor)}"></label>
+        <label class="field">Google scraper (Apify id)<input class="input" name="googleActor" value="${esc(c.googleActor)}"></label></div>
       <div class="section-title settings-block">Struggling-creator prospects</div>
       <div class="settings-grid">${num("prospectMinFollowers", "Min followers")}${num("prospectMaxFollowers", "Max followers")}${num("declineThreshold", "Decline threshold (%)", "Views down at least this much")}${num("minPostsPerWeek", "Min posts per week")}</div>
       <div class="section-title settings-block">Budget and scrapers</div>
@@ -547,7 +554,7 @@ function renderSettings(v) {
       </tbody></table></div><div class="small muted" style="margin-top:8px">This month: $${monthSpend().toFixed(2)} estimated of the $5 free Apify credit.</div>` : `<div class="empty">No runs yet.</div>`}</div>`;
   $("[data-config]", v).addEventListener("submit", async (e) => {
     e.preventDefault(); const fd = Object.fromEntries(new FormData(e.target));
-    for (const k of ["bioKeywords", "highlightKeywords", "styles"]) fd[k] = fd[k].split(",").map((s) => s.trim()).filter(Boolean);
+    for (const k of ["bioKeywords", "highlightKeywords", "styles", "hashtags", "searchKeywords", "bioSearchPhrases"]) fd[k] = fd[k].split(",").map((s) => s.trim()).filter(Boolean);
     S.data.config = await act(() => api("PUT", "/config", fd), "Settings saved");
   });
 }

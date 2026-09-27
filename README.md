@@ -92,6 +92,18 @@ The dashboard finds the name, Instagram handle, email and message fields automat
 
 To change the schedule, edit the `cron:` line in `.github/workflows/scan.yml`. For example, `"0 6 * * 1"` is every Monday.
 
+## How it finds creators beyond your list
+
+Each reel scan saves part of its budget, and takes new accounts from every method in turn so no single one crowds out the rest (**Budget share for discovery**, default 40%) for looking beyond your sources:
+
+1. **Bio words:** Google indexes Instagram bios, so it searches Google (`site:instagram.com`) for creator bio phrases (your **Bio phrases**, or your bio keywords if blank), combined with your niche words, hashtags and the distinctive words in your sources' own bios.
+1. **Hashtag feeds:** it takes your own **Niche hashtags** (Settings), plus the hashtags your sources use most often (picked automatically from their captions), and pulls the top reels for each from anyone on Instagram.
+2. **Account search:** it looks up any **Account search terms** you set, e.g. `fitness model`.
+3. **Similar accounts:** it checks Instagram's "similar accounts" for a rotating sample of your sources, then follows the similar accounts of the strongest new matches it finds (snowballing). Instagram sometimes hides these from scrapers; the run log says when that happens.
+4. **Mentions:** it collects accounts your sources tag or mention.
+
+Every account it finds is checked for creator signals (bio link, bio wording, highlights). Clear matches become new sources automatically, and borderline ones go to **Review**. Their breakout reels go straight into the Reel Bank, marked **Discovered**, and are judged against their follower count: a reel with 2× more views than the creator has followers counts as a breakout. The monthly prospect scan checks **every** creator found this way for a 90-day decline, rotating through them if the budget can't cover everyone in one run, so prospects come from the whole pool, not just your seed list.
+
 ## Budget
 
 Every run stops at **Max results per run** (Settings; default 900). The Apify Free plan can't exceed $5, so the worst case is a run that stops early, never a bill.
